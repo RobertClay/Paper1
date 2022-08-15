@@ -1,0 +1,479 @@
+---
+title: "Paper 1 notebook"
+output: html_notebook
+---
+
+
+```{r}
+source("utils.R")
+source("notebook_utils.R")# load in utility functions
+require(lme4)
+require(tidyr)
+# for presentation.
+require(ggfortify)
+require(Hmisc)
+# for missingness.
+require(tidyr)
+require(VIM)
+require(mice)
+require(lattice) # for histogram.
+require(laeken) # for weighedMean.
+# for extrapolation.
+require(tidyr)
+require(glmnet)
+# for heterogeneity.
+require(tidyr)
+require(glmnet)
+require(geepack)
+require(lme4)
+require(MuMIn)
+```
+
+
+
+
+
+
+
+
+#########################################################################
+## Baseline 
+```{r}
+# Preprocessing data.
+
+
+data <- format_baseline_data("/Users/robertclay/paper1/data/corrected_US/", c(2011,2012,2013))
+summary(data)
+# Rescale continuous variables
+scaled_variables <- c("age", "gross_hh_income", "SF.12")
+data[,scaled_variables] <- scale(data[,scaled_variables])
+
+# Convert discrete variables to factors. 
+#data$depression_change <- factor(data$depression_change, ordered=T)
+
+data <- tidyr::drop_na(data)
+n <- nrow(data)
+set.seed(88)
+Inx <- sample(n, 0.8*n)
+train<-data[Inx,]
+test<-data[-Inx,]
+
+y <- train$depression
+y2<- test$depression
+```
+
+Baseline data analysis for SF.12
+```{r}
+sf12.lm <- lm(SF.12 ~ factor(sex) + 
+               factor(ethnicity) + 
+               age + 
+               factor(education_state) + 
+               factor(labour_state) + 
+               factor(job_sec) +
+               factor(region) +
+               gross_hh_income, 
+               data= train)
+
+a<- summary(sf12.lm)
+print(a)
+print(a$adj.r.squared)
+print(AIC(sf12.lm))
+```
+
+
+## Presentation
+
+assess assumptions of linear model for SF.12.
+see 4 plots
+Residuals vs Fitted. Used to check the linear relationship assumptions. A horizontal line, without distinct patterns is an indication for a linear relationship, what is good.
+
+Normal Q-Q. Used to examine whether the residuals are normally distributed. It’s good if residuals points follow the straight dashed line.
+
+Scale-Location (or Spread-Location). Used to check the homogeneity of variance of the residuals (homoscedasticity). Horizontal line with equally spread points is a good indication of homoscedasticity. This is not the case in our example, where we have a heteroscedasticity problem.
+
+Residuals vs Leverage. Used to identify influential cases, that is extreme values that might influence the regression results when included or excluded from the analysis. 
+
+```{r}
+pdf("../plots/first_sf12_dist.pdf")
+hist(train$SF.12)
+dev.off()
+
+pdf("../plots/SF12_residuals.pdf")
+hist(residuals(sf12.lm))
+dev.off()
+
+pdf("../plots/SF12_diagnostics.pdf")
+autoplot(sf12.lm)
+dev.off()
+```
+
+see residuals and leverage stable aparat from extreme outliers.
+qq plot does okay but deviates on left tail. suggests over estimating more depressed individual SF12 scores. scale location clearly non constant. suggests heteroscedasticity which would be expected in data with repeat observations like this. 
+
+There are obvious highly extreme values here. See major leverage values for observations with index 92349 and 71315 (PID 884636487 and 681114527). In this case it is due to individuals suddenly experiencing over 10x increases in income. Their SF12 score is majorly over estimated. 
+
+Removing from the data..
+
+```{r}
+train2 <- train[(which(train$pidp %nin% c(884636487, 681114527, 750749251, 68397127, 1361073051, 1088667767))),]
+sf12.lm2<-lm(SF.12 ~ factor(sex) + 
+                    factor(ethnicity) + 
+                    age + 
+                    factor(education_state) + 
+                     factor(labour_state) + 
+                     factor(job_sec) +
+                      gross_hh_income, 
+                       data= train2)
+print(summary(sf12.lm2))
+
+pdf("../plots/no_outliers_sf12_residuals.pdf")
+hist(residuals(sf12.lm2))
+dev.off()
+
+pdf("../plots/no_outliers_diagnostics.pdf")
+autoplot(sf12.lm2)
+dev.off()
+```
+
+# Missingness
+
+
+Structure of missingness.
+clear vast majority of missing are in depression states.
+rest of states have low enough percentages to impute via MI. 
+35922 entries total. 
+
+```{r}
+# Preprocessing data.
+
+
+data <- format_baseline_data("/Users/robertclay/paper1/data/corrected_US/", c(2011,2012,2013))
+summary(data)
+# Rescale continuous variables
+scaled_variables <- c("age", "gross_hh_income", "SF.12")
+data[,scaled_variables] <- scale(data[,scaled_variables])
+
+# Convert discrete variables to factors. 
+#data$depression_change <- factor(data$depression_change, ordered=T)
+
+n <- nrow(data)
+set.seed(88)
+Inx <- sample(n, 0.8*n)
+train<-data[Inx,]
+test<-data[-Inx,]
+
+y <- train$depression
+y2<- test$depression
+```
+```{r}
+pdf("../plots/total_missingness_structure.pdf")
+aggr(data, numbers=T, cex.axis=0.5, col = c(blue, orange))
+dev.off()
+
+pdf("../plots/ethnicity_SF12_spinogram.pdf")
+spineMiss(data[, c("ethnicity", "SF.12")], col = c(blue, orange))
+dev.off()
+
+pdf("../plots/age_SF12_spinogram.pdf")
+spineMiss(data[, c("age", "SF.12")], col = c(blue, orange))
+dev.off()
+
+pdf("../plots/jbsec_SF12_spinogram.pdf")
+spineMiss(data[, c("job_sec", "SF.12")], col = c(blue, orange))
+dev.off()
+
+pdf("../plots/labour_SF12_spinogram.pdf")
+spineMiss(data[, c("labour_state", "SF.12")], col = c(blue, orange))
+dev.off()
+```
+
+see same for continuous variables
+```{r}
+is_missing_sf12 <- is.na(data$SF.12)
+is_missing_dep <- is.na(data$depression)
+is_missing_depc <- is.na(data$depression_change)
+
+pdf("../plots/age_SF12_histograms.pdf")
+histogram(~age|is_missing_sf12, data)
+dev.off()
+pdf("../plots/age_HLPRB_histograms.pdf")
+histogram(~age|is_missing_dep, data)
+dev.off()
+
+pdf("../plots/age_GHQ_histograms.pdf")
+histogram(~age|is_missing_depc, data)
+dev.off()
+
+# do this for household too?
+```
+
+
+MICE
+```{r}
+
+imp_columns <- c("SF.12","labour_state", "age", "sex", "ethnicity", "job_sec", "education_state", "region", "gross_hh_income")
+meth<- c("norm", 'rfcat')
+mice_set <- mice(data = data[, imp_columns],
+                 m = 10, maxit = 30, seed = 88, remove_colinear=F)
+print(summary(complete(mice_set)))
+
+aggr((complete(mice_set)))
+```
+
+
+SF.12 pooled regression
+```{r}
+mice.sf12.lm <- with(data=mice_set, expr={lm(SF.12 ~ factor(sex) + 
+               factor(ethnicity) + 
+               age + 
+               factor(education_state) + 
+               factor(labour_state) + 
+               factor(job_sec) +
+               factor(region) +
+               gross_hh_income)})
+
+final.pool<- pool(mice.sf12.lm)
+
+summary(final)
+
+
+pdf("../plots/MICE_convergence.pdf")
+plot(mice_set)
+dev.off()
+
+pdf("../plots/sf12_difference_hist.pdf")
+hist(complete(mice_set)$SF.12, col=t_blue, freq=F)
+hist(data$SF.12, col=t_orange, freq=F, add=T)
+legend("topright", c("Complete", "Imputed"), fill=c(blue, orange))
+dev.off()
+
+pdf("../plots/eth_diff.pdf")
+mice_eth <- table(complete(mice_set, c(5))$ethnicity)/nrow(complete(mice_set))
+data_eth <- table(data$ethnicity)/nrow(data)
+eth<- rbind(mice_eth, data_eth)
+rownames(eth) <-c("Complete", "MICE")
+barplot(eth,
+        col = c(t_blue, t_orange),
+        beside=T,
+        xlab="Ethnicity")
+legend("top", rownames(eth), col=c(t_blue, t_orange), lwd=2)
+dev.off()
+
+pdf("../plots/job_sec_diff.pdf")
+mice_eth <- table(complete(mice_set, c(5))$job_sec)/nrow(complete(mice_set))
+data_eth <- table(data$job_sec)/nrow(data)
+eth<- rbind(mice_eth, data_eth)
+rownames(eth) <-c("Complete", "MICE")
+barplot(eth,
+        col = c(t_blue, t_orange),
+        beside=T,
+        xlab="Ethnicity")
+legend("top", rownames(eth), col=c(t_blue, t_orange), lwd=2)
+dev.off()
+```
+
+
+
+
+
+
+
+
+
+
+
+
+# Extrapolation
+
+```{r}
+data <- format_baseline_data("/Users/robertclay/paper1/data/corrected_US/", c(2008, 2009, 2010))
+
+summary(data)
+# Rescale continuous variables
+scaled_variables <- c("age", "gross_hh_income", "SF.12")
+data[,scaled_variables] <- scale(data[,scaled_variables])
+
+# Convert discrete variables to factors. 
+#data$depression_change <- factor(data$depression_change, ordered=T)
+
+data <- tidyr::drop_na(data)
+n <- nrow(data)
+set.seed(88)
+Inx <- sample(n, 0.8*n)
+train<-data[Inx,]
+test<-data[-Inx,]
+
+sf12.lma <- lm(SF.12 ~ factor(sex) + 
+               factor(ethnicity) + 
+               age + 
+               factor(education_state) + 
+               factor(labour_state) + 
+               factor(job_sec), 
+               data= train)
+
+preds <- predict(sf12.lm, test)
+
+a<- summary(sf12.lma)
+print(a)
+print(a$adj.r.squared)
+plot(residuals(sf12.lma))
+plot(sf12.lma)
+```
+
+```{r}
+data <- format_baseline_data("/Users/robertclay/paper1/data/corrected_US/", c(2013,2014,2015))
+summary(data)
+# Rescale continuous variables
+scaled_variables <- c("age", "gross_hh_income", "SF.12")
+data[,scaled_variables] <- scale(data[,scaled_variables])
+
+# Convert discrete variables to factors. 
+data <- tidyr::drop_na(data)
+n <- nrow(data)
+set.seed(88)
+Inx <- sample(n, 0.8*n)
+train<-data[Inx,]
+test<-data[-Inx,]
+
+y <- train$depression
+y2<- test$depression
+
+sf12.lmb <- lm(SF.12 ~ factor(sex) + 
+               factor(ethnicity) + 
+               age + 
+               factor(education_state) + 
+               factor(labour_state) + 
+               factor(job_sec) +
+               factor(region) +
+               gross_hh_income, 
+               data= train)
+
+preds <- predict(sf12.lmb, test)
+
+a<- summary(sf12.lmb)
+print(a)
+print(a$adj.r.squared)
+
+extrap.coefs <- cbind(sf12.lm$coefficients, sf12.lma$coefficients, sf12.lmb$coefficients, rowSums(cbind(summary(sf12.lm)$coefficients[,4], summary(sf12.lma)$coefficients[,4], summary(sf12.lmb)$coefficients[,4])<0.05))
+```
+
+LASSO now
+
+```{r}
+# Preprocessing data.
+
+
+data <- format_baseline_data("/Users/robertclay/paper1/data/corrected_US/", c(2011,2012,2013))
+summary(data)
+# Rescale continuous variables
+scaled_variables <- c("age", "gross_hh_income", "SF.12")
+data[,scaled_variables] <- scale(data[,scaled_variables])
+
+# Convert discrete variables to factors. 
+data <- tidyr::drop_na(data)
+n <- nrow(data)
+set.seed(88)
+Inx <- sample(n, 0.8*n)
+train <-data[Inx,]
+train <- train[order(train$pidp, train$time),]
+test <-data[-Inx,]
+test <- test[order(train$pidp, train$time),]
+
+y <- train$SF.12
+y2<- test$SF.12
+ 
+x <- model.matrix(SF.12 ~ (factor(sex) + 
+               factor(ethnicity) + 
+               age + 
+               factor(education_state) + 
+               factor(labour_state) + 
+               factor(job_sec) +
+               factor(region) +
+               gross_hh_income),
+               data=train)
+
+
+# Fit LASSO
+lasso <- glmnet(x, y, alpha = 1, family = "gaussian")
+cv.lasso <- cv.glmnet(x, y, alpha = 1, family = "gaussian")
+
+
+# Plot LASSO
+pdf("../plots/lasso_coefficients.pdf")
+plot(lasso, xvar = "lambda", label = T) 
+abline(v = log(cv.lasso$lambda.min), col = "blue",lty=2)
+abline(v = log(cv.lasso$lambda.1se), col = "red")
+#text(-7.34, 1.6, "Minimum error", col="blue")
+#text(-4.75, 1.6, "1 standard error", col="red")
+dev.off()
+
+pdf("../plots/sf12_lasso_cv.pdf")
+plot(cv.lasso)
+dev.off()
+coef(cv.lasso, s = "lambda.min")
+coef(cv.lasso, s = "lambda.1se")
+
+lasso.1se <- glmnet(x, y, alpha = 1, family = "gaussian", lambda=cv.lasso$lambda.1se)
+tLL <- lasso.1se$nulldev - deviance(lasso.1se)
+k <- lasso.1se$df
+n <- lasso.1se$nobs
+AICc <- -tLL+2*k+2*k*(k+1)/(n-k-1)
+AICc
+
+# note the type = "class" is preferable here. 
+# the choice of a cutoff at p=0.5 is very arbitrary and this function helps
+# to optimise the position of that line.
+# For the the bubble plot is best for visual interpretation.
+```
+
+# Heterogeneity
+
+```{r}
+
+dep.gee <- geeglm(SF.12 ~ factor(sex) + 
+               factor(ethnicity) + 
+               age + 
+               factor(education_state) + 
+               factor(labour_state) + 
+               factor(job_sec) + 
+               factor(region) +
+               gross_hh_income,
+               data = train,
+               family = gaussian,
+               id=pidp, 
+               waves=time,
+               corstr="ar1")
+
+print(summary(dep.gee))
+print(QIC(dep.gee))
+
+ggplt <- ggplot(dep.gee, aes(x=fitted(dep.gee),y = sqrt(abs(resid(.)))))+
+         geom_point()+
+         geom_smooth(method=lm(sqrt(abs(resid(.)))~fitted(.)),se=FALSE,fullrange=TRUE)+
+         theme_classic()
+ggplt
+
+gee.plot.data <- cbind(fitted(dep.gee), sqrt(abs(resid(dep.gee))))
+colnames(gee.plot.data) <- c("a", "b")
+gee.plot<- ggplot(gee.plot.data, aes(x=a, y=b))+
+        geom_point(alpha=0.5) +
+        geom_smooth(method="loess", size=0.5, col=blue)
+gee.plot
+```
+
+```{r}
+dep.glmm <- lmer(SF.12  ~  factor(sex) + 
+               factor(ethnicity) + 
+               age + 
+               factor(education_state) + 
+               factor(labour_state) + 
+               factor(job_sec) + 
+               factor(region) +
+               gross_hh_income +
+                (1|pidp) + (1|time), data = train)
+
+
+glmm.sum <- summary(dep.glmm)
+AIC(dep.glmm)
+r.squaredGLMM(dep.glmm)
+```

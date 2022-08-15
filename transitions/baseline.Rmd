@@ -1,0 +1,300 @@
+---
+title: "Baseline Understanding Society Fitting."
+output: html_notebook
+---
+
+```{r}
+source("utils.R")
+source("notebook_utils.R")# load in utility functions
+require(lme4)
+require(msm)
+require(tidyr)
+```
+This notebook provides baseline data processing and fitting of transition models for depression
+data in Understanding Society. First, we load data, remove missing variables, and provide a summary below. There are 9 variables used in this study. While there are many more available in 
+US a limited number have been specifically chosen. These variables are consistent accross all 30 waves of US data. Many variables are only briefly recorded or heavily missing and not useful in calibration of transitions for long term microsimulations. This small subset also considers datasets from countires with fewer means to collect extensive data. Fewer variables provide low complexity making models easy to interpret and augment exploring other sources of variance. We have 11 variables to interpret
+
+| Variable   | Description   | Type |
+|---|---|---|
+| SF.12  | Short form survey (SF12) depression score. A 0-36 score normalised to a Gaussian distribution  | Continuous  |
+| depression  | Does an individual have clinical depression?  | Categorical (0/1)   |
+| depression_change  | General Health Question (GHQ) relative depression state. Is a person more or less depressed than usual?  | Ordinal  |
+| age  | Age  | Continuous  |
+| sex  | Sex   | Categorical  |
+| ethnicity  |  Ethnicity | Categorical  |
+| job_sec  | NS_SEC Socioeconomic occupation code. A 1-8 scale for an individuals job ranging from corporate executives to routine labour.   | Ordinal   |
+| labour_state  | Is a person employed, unemployed, a student etc.  | Categorical  |
+| education_state  |  What level of qualification does an individual have. |Categorical |
+| region| Which Administrative region of the UK does the subject live? | Categorical |
+| time | Which year is an observation from. | Ordinal|
+
+```{r}
+data <- format_baseline_data("/Users/robertclay/paper1/data/corrected_US/", c(2011,2012,2013))
+summary(data)
+data[,c("age", "gross_hh_income")] <- scale(data[,c("age", "hh_netinc")])
+#data[,c("SF.12")] <- scale(data[,c("SF.12")])
+
+data$depression_change <- factor(data$depression_change, ordered=T)
+```
+
+Using this data transition models will be fitted to the three depression variables given all others. This allows presentation of common transition models for continuous, ordinal, and categorical data. 
+
+First a model is fitted to the categorical depression score. This is simply a binary measure of if an individual is diagnosed with clinical depression or not. A standard logistic regression is fitted.
+
+```{r}
+data <- tidyr::drop_na(data)
+n <- nrow(data)
+set.seed(88)
+Inx <- sample(n, 0.8*n)
+train<-data[Inx,]
+test<-data[-Inx,]
+
+y <- train$depression
+y2<- test$depression
+
+logit <- glm(relevel(factor(depression), ref = "Not Depressed") ~ factor(sex) + 
+               factor(ethnicity) + 
+               age + 
+               factor(education_state) + 
+               factor(labour_state) + 
+               factor(job_sec) + 
+               gross_hh_income, 
+               data= train,
+               family = binomial(link="logit"))
+prs <- 1 - logit$deviance / logit$null.deviance # pseudo R-Squared.
+print(prs)
+preds <- invlogit(predict(logit, test))
+
+print(summary(logit))
+
+colours <- as.character(factor(y2, labels=c("blue", "orange")))
+markers <-as.numeric(as.character(factor(y2, labels = c(3, 20))))
+
+pdf("../plots/HLPRB_scatter.pdf")
+plot_depression_residuals(preds, y2, colours, markers)
+dev.off()
+
+```
+
+This logistic generalised linear model (logit) estimates a probability of depression given the following formula
+$$ depression = logit(sex + ethnicity + age + factor(education_state) + factor(labour\_state) + factor(job_sec)).$$
+It is clear this is not a good fitting model. A pseudo-R^2 score of 0.08 with 0 people correctly predicted as depressed is.
+
+
+```{r}
+
+sf12.lm <- lm(SF.12 ~ factor(sex) + 
+               factor(ethnicity) + 
+               age + 
+               factor(education_state) + 
+               factor(labour_state) + 
+               factor(job_sec) +
+               hh_netinc, 
+               data= train)
+
+preds <- predict(sf12.lm, test)
+
+a<- summary(sf12.lm)
+print(a)
+print(a$adj.r.squared)
+pdf("../plots/SF12_residuals.pdf")
+plot(residuals(sf12.lm))
+dev.off()
+
+```
+
+Section on ordinal depression_change
+```{r}
+library(scales)
+y <- train$depression_change
+y2<- test$depression_change
+
+# https://stackoverflow.com/questions/42114194/can-multinomial-models-be-estimated-using-generalized-linear-model
+dep.pois<- glm(as.numeric(depression_change) ~ factor(sex) + 
+             factor(ethnicity) + 
+             age +
+             factor(education_state) +
+             factor(labour_state) +
+             factor(job_sec) +
+             factor(region) +
+             gross_hh_income,
+             train,
+             family = poisson)
+prs <- 1 - dep.pois$deviance / dep.pois$null.deviance
+print(prs)
+preds <- predict(dep.pois, test)
+
+print(summary(dep.pois))
+markers <- as.integer(markers)
+colours <- as.character(factor(y2, labels=c("blue", "orange", "green", "red")))
+markers <-as.numeric(as.character(factor(y2, labels = c(0, 3, 21, 17))))
+plot(exp(predict(dep.pois, test)), col = alpha(colours, 0.5))#dev.off()
+
+w1 <- which(test$depression_change == 1)
+plot(exp(predict(dep.pois, test[w1,])), col = "blue", pch=1)#dev.off()
+abline(h = 1)
+w2 <- which(test$depression_change == 2)
+plot(exp(predict(dep.pois, test[w2,])), col = "orange", pch=3)#dev.off()
+abline(h = 2)
+w3 <- which(test$depression_change == 3)
+plot(exp(predict(dep.pois, test[w3,])), col = "green", pch=20)#dev.off()
+abline(h = 3)
+w4 <- which(test$depression_change == 4)
+plot(exp(predict(dep.pois, test[w4,])), col = "red", pch=17)#dev.off()
+abline(h = 4)
+```
+
+```{r}
+require(ordinal)
+y <- train$depression_change
+y2<- test$depression_change
+
+
+clm.formula <- "depression_change~ factor(sex) + 
+factor(ethnicity) + age  + factor(education_state) + factor(labour_state) + 
+factor(job_sec) + gross_hh_income + factor(region) + SF.12 + factor(depression)"
+dep.clm <- clm(clm.formula, data= train,
+             link = "loglog", threshold = "flexible" )
+
+print(summary(dep.clm))
+prs2<- 1 - logLik(dep.clm)/logLik(clm("depression_change ~ 1",data= train))
+print(prs2)
+
+colours <- as.character(factor(y2, labels=c("blue", "orange", "green", "red")))
+markers <-as.numeric(as.character(factor(y2, labels = c(0, 3, 21, 17))))
+test2 <- subset(test, select=-depression_change) # need to remove response column or the predict function defaults to probability of being in their true state. useful but not used here.
+
+preds <- predict(dep.clm, test2, type="prob")$fit
+for (i in seq(1, 4)){
+plot_name <- concat("../plots/clm_level_", str(i))
+plot_name <- concat(plot_name, ".pdf")
+pdf(plot_name)
+par(mar=c(5.1, 4.1, 4.1, 8.1), xpd=TRUE)
+ylabel = concat("Probability of observation being in state: ", i)
+plot(preds[, i], col=colours, pch = markers, ylab=ylabel)
+legend("topright", inset = c(-.25, 0), legend=c("Less", "Same", "More", "Much more"), col = c("blue", "orange", "green", "red"), pch = c(0, 3, 21, 17))
+par(mar=c(5.1, 4.1, 4.1, 8.1), xpd=F)
+dev.off()
+}
+
+preds <- predict(dep.clm, test2, type="class")
+t<- table(y2, preds$fit)
+diag(t)/rowSums(t)
+```
+
+
+```{r}
+require(ggplot2) # for confusion matrix plots
+#require(dplyr) # matrix manipulation
+require(stringr)# for fancy wrapped text in confusion matrix axis labels
+require(shadowtext) #^
+confusion.matrix<- table(predict(dep.clm, test, type="class")$fit, y2)
+group_pops<-rowSums(confusion.matrix)
+confusion.frame <- as.data.frame(confusion.matrix/group_pops) # convert to data frame
+confusion.frame$Freq <-round(confusion.frame$Freq, 3) # round to 2dp
+row_names <- paste0(rownames(confusion.matrix), " [")
+row_names <- paste0(row_names,  as.character(group_pops))
+row_names <- paste0(row_names, "]")
+row_names <- str_wrap(row_names, width = 12)
+col_names <- str_wrap(colnames(confusion.matrix), 10)
+
+# each column is people actually in a state.
+# each row is people predicted a state.
+# E.g. row 3 column 2 is the percentage of people actually in family care
+# predicted as sick/disabled (~7%).
+confusion.plot<- ggplot(confusion.frame, aes(y2, rev(Var1), fill= Freq)) +
+  scale_fill_viridis_c("% of state")+
+  geom_tile() + 
+  geom_shadowtext(aes(label=Freq)) +
+  #scale_fill_gradient(high="#87ceeb", low="#e34234") +
+  labs(y = "True State [population in state]",x = "Predicted State (no units)") + 
+  scale_y_discrete(labels=rev(row_names)) + # label axes
+  scale_x_discrete(labels=col_names)
+print(confusion.plot)
+```
+
+```{r}
+train.dep.clmm <- data[which(data$pidp%in%head(data,15000)$pidp),]
+dep.clmm <- clmm2(depression_change ~ SF.12, random = factor(pidp), 
+data= train.dep.clmm,
+link = "logistic",
+threshold = "flexible",
+Hess=T,
+nAGQ=10)
+
+print(summary(dep.clmm))
+prs3<- 1 - logLik(dep.clmm)/logLik(clmm2(depression_change ~ 1,data= train.dep.clmm))
+print(prs3)
+```
+
+```{r}
+# Arguments:
+#  - model = a clmm model
+#  - modelAvg = a clmm model average (object of class averaging)
+#  - newdata = a dataframe of new data to apply the model to
+# Returns a dataframe of predicted probabilities for each row and response level
+pred <-
+function(eta, theta, u, cat = 1:(length(theta)+1), inv.link = plogis)
+{
+Theta <- c(-1e3, theta, 1e3)
+sapply(cat, function(j)
+inv.link(Theta[j+1] - eta - u) - inv.link(Theta[j] - eta - u) )
+}
+
+ranef<- cbind(unique(train.dep.clmm$pidp), dep.clmm$ranef)
+colnames(ranef) <- c("pidp", "ranef")
+train.dep.clmm <- merge(train.dep.clmm, ranef, by="pidp")
+clmm.preds <- matrix(0, nrow=nrow(train.dep.clmm), ncol=4)
+clmm.preds[, 1] <- sapply((dep.clmm$Theta[1] - dep.clmm$beta*train.dep.clmm$SF.12 - train.dep.clmm$ranef), invlogit)
+clmm.preds[, 4] <- 1 - sapply((dep.clmm$Theta[3] - dep.clmm$beta*train.dep.clmm$SF.12 - train.dep.clmm$ranef), invlogit)
+
+for (j in seq(1, 2)){
+clmm.preds[, j+1]<- sapply((dep.clmm$Theta[j+1] - dep.clmm$beta*train.dep.clmm$SF.12 - train.dep.clmm$ranef), invlogit) - sapply((dep.clmm$Theta[j] - dep.clmm$beta*train.dep.clmm$SF.12 - train.dep.clmm$ranef), invlogit)
+}
+clmm.preds.classes <- max.col(clmm.preds)
+
+clmm.preds[which(train.dep.clmm$depression_change==1), 1]
+predict(dep.clmm, train.dep.clmm)[which(train.dep.clmm$depression_change==1)]
+
+y3 <- train.dep.clmm$depression_change
+confusion.matrix<- table(y3, clmm.preds.classes)
+group_pops<-rowSums(confusion.matrix)
+confusion.frame <- as.data.frame(confusion.matrix/group_pops) # convert to data frame
+confusion.frame$Freq <-round(confusion.frame$Freq, 3) # round to 2dp
+row_names <- paste0(rownames(confusion.matrix), " [")
+row_names <- paste0(row_names,  as.character(group_pops))
+row_names <- paste0(row_names, "]")
+row_names <- str_wrap(row_names, width = 12)
+col_names <- str_wrap(colnames(confusion.matrix), 10)
+
+# each column is people actually in a state.
+# each row is people predicted a state.
+# E.g. row 3 column 2 is the percentage of people actually in family care
+# predicted as sick/disabled (~7%).
+confusion.plot<- ggplot(confusion.frame, aes(clmm.preds.classes, rev(y3), fill= Freq)) +
+  scale_fill_viridis_c("% of state")+
+  geom_tile() + 
+  geom_shadowtext(aes(label=Freq)) +
+  #scale_fill_gradient(high="#87ceeb", low="#e34234") +
+  labs(y = "True State [population in state]",x = "Predicted State (no units)") + 
+  scale_y_discrete(labels=rev(row_names)) + # label axes
+  scale_x_discrete(labels=col_names)
+print(confusion.plot)
+```
+
+```{r}
+clmm.preds<- predict(dep.clmm, train)
+single_colours <- c("blue", "orange", "green", "red")
+single_markers <- c(0, 3, 21, 17)
+for (i in seq(1, 4)){
+plot_name <- concat("../plots/clmm_level_", str(i))
+plot_name <- concat(plot_name, ".pdf")
+pdf(plot_name)
+par(mar=c(5.1, 4.1, 4.1, 8.1), xpd=TRUE)
+ylabel = concat("Probability of observation being in state: ", i)
+plot(clmm.preds[which(train$depression_change==i)], col=single_colours[i], pch = single_markers[i], ylab=ylabel)
+
+par(mar=c(5.1, 4.1, 4.1, 8.1), xpd=F)
+dev.off()
+}
+```

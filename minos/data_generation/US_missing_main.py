@@ -60,7 +60,7 @@ def main(output_dir):
 
     f_columns = ["age", "education_state", "depression", "depression_change",
                  "labour_state", "job_duration_m", "job_duration_y", "job_occupation",
-                 "job_industry", "job_sec"]  # add more variables here.
+                 "job_industry", "job_sec", "gross_hh_income"]  # add more variables here.
     fb_columns = ["sex", "ethnicity", "birth_year"]  # or here if they're immutable.
     data = US_missing_LOCF.locf(data, f_columns=f_columns, fb_columns=fb_columns)
     print("After LOCF correction.")

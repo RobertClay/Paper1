@@ -1,0 +1,154 @@
+---
+title: "Extrapolation"
+output: html_notebook
+---
+
+
+```{r}
+source("utils.R")
+source("notebook_utils.R")# load in utility functions
+require(tidyr)
+require(glmnet)
+```
+
+```{r}
+data <- format_baseline_data("/Users/robertclay/paper1/data/corrected_US/", c(2015, 2016, 2017))
+summary(data)
+data <- drop_na(data)
+n <- nrow(data)
+set.seed(8)
+Inx <- sample(n, 0.8*n)
+train<-data[Inx,]
+test<-data[-Inx,]
+sf12.lm <- lm(SF.12 ~ factor(sex) + 
+               factor(ethnicity) + 
+               age + 
+               factor(education_state) + 
+               factor(labour_state) + 
+               factor(job_sec), 
+               data= train)
+
+preds <- predict(sf12.lm, test)
+
+a<- summary(sf12.lm)
+print(a)
+print(a$adj.r.squared)
+plot(residuals(sf12.lm))
+
+qqnorm(predict(sf12.lm, test))
+qqline(test$SF.12)
+```
+LASSO for extrapolation instead
+
+```{r}
+x <- model.matrix(factor(depression) ~ factor(sex) +
+                    factor(ethnicity) + 
+                    age + 
+                    factor(education_state) +
+                    factor(labour_state) +
+                    factor(job_sec),
+                  data)
+x2<- x[-Inx,]
+x<- x[Inx,]
+y <- data[Inx, "depression"]
+y2 <- data[-Inx, "depression"]
+
+# Fit LASSO
+lasso <- glmnet(x, y, alpha = 1, family = "binomial", type.measure = "class")
+cv.lasso <- cv.glmnet(x, y, alpha = 1, family = "binomial", type.measure = "class")
+
+
+# Plot LASSO
+plot(lasso, xvar = "lambda", label = T) 
+abline(v = log(cv.lasso$lambda.min), col = "blue",lty=2)
+abline(v = log(cv.lasso$lambda.1se), col = "red")
+#text(-7.34, 1.6, "Minimum error", col="blue")
+#text(-4.75, 1.6, "1 standard error", col="red")
+
+plot(cv.lasso)
+coef(cv.lasso, s = "lambda.min")
+
+best<- glmnet(x2, y2, alpha=1, family = "binomial", lambda = cv.lasso$lambda.min)
+# note the type = "class" is preferable here. 
+# the choice of a cutoff at p=0.5 is very arbitrary and this function helps
+# to optimise the position of that line.
+# For the the bubble plot is best for visual interpretation.
+preds<- invlogit(predict(cv.lasso, s = "lambda.min", x2))# type = "class"
+preds2<- invlogit(predict(cv.lasso, s = "lambda.1se", x2))# type = "class"
+
+colours <- as.character(factor(y2, labels=c("blue", "orange")))
+markers <-as.numeric(as.character(factor(y2, labels = c(3, 20))))
+
+plot_depression_residuals(preds, y2, colours, markers)
+plot_depression_residuals(preds2, y2, colours, markers)
+```
+
+
+```{r}
+x <- model.matrix(factor(depression_change) ~ factor(sex) +
+                    factor(ethnicity) + 
+                    age + 
+                    factor(education_state) +
+                    factor(labour_state) +
+                    factor(job_sec),
+                  data)
+x2<- x[-Inx,]
+x<- x[Inx,]
+y <- data[Inx, "depression_change"]
+y2 <- data[-Inx, "depression_change"]
+
+# Fit LASSO
+lasso <- glmnet(x, y, alpha = 1, family = "multinomial", type.measure = "class")
+cv.lasso <- cv.glmnet(x, y, alpha = 1, family = "multinomial", type.measure = "class")
+
+
+# Plot LASSO
+plot(lasso, xvar = "lambda", label = T) 
+abline(v = log(cv.lasso$lambda.min), col = "blue",lty=2)
+abline(v = log(cv.lasso$lambda.1se), col = "red")
+#text(-7.34, 1.6, "Minimum error", col="blue")
+#text(-4.75, 1.6, "1 standard error", col="red")
+
+plot(cv.lasso)
+coef(cv.lasso, s = "lambda.min")
+
+best<- glmnet(x2, y2, alpha=1, family = "multinomial", lambda = cv.lasso$lambda.min)
+# note the type = "class" is preferable here. 
+# the choice of a cutoff at p=0.5 is very arbitrary and this function helps
+# to optimise the position of that line.
+# For the the bubble plot is best for visual interpretation.
+preds<- invlogit(predict(cv.lasso, s = "lambda.min", x2))# type = "class"
+preds2<- invlogit(predict(cv.lasso, s = "lambda.1se", x2))# type = "class"
+
+#plot_depression_residuals(preds, y2, colours, markers)
+#plot_depression_residuals(preds2, y2, colours, markers)
+```
+```
+
+```{r}
+data <- format_baseline_data("/Users/robertclay/paper1/data/corrected_US/", c(2005,2006,2007))
+summary(data)
+data <- drop_na(data)
+n <- nrow(data)
+set.seed(8)
+Inx <- sample(n, 0.8*n)
+train<-data[Inx,]
+test<-data[-Inx,]
+sf12.lm <- lm(SF.12 ~ factor(sex) + 
+               factor(ethnicity) + 
+               age + 
+               factor(education_state) + 
+               factor(labour_state) + 
+               factor(job_sec), 
+               data= train)
+
+preds <- predict(sf12.lm, test)
+
+a<- summary(sf12.lm)
+print(a)
+print(a$adj.r.squared)
+plot(residuals(sf12.lm))
+
+qqnorm(predict(sf12.lm, test))
+qqline(test$SF.12)
+```

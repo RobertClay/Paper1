@@ -66,15 +66,15 @@ def locf(data, f_columns = None, b_columns = None, fb_columns = None):
     if f_columns:
         # Forward fill.
         fill = applyParallelLOCF(pid_groupby[f_columns], ffill_groupby)
-        data[f_columns] = fill
+        data[f_columns] = fill[f_columns]
     if b_columns:
         # backward fill. only use this on IMMUTABLE attributes.
         fill = applyParallelLOCF(pid_groupby[b_columns], bfill_groupby)
-        data[b_columns] = fill
+        data[b_columns] = fill[b_columns]
     if fb_columns:
         # forwards and backwards fill. again immutables only.
         fill = applyParallelLOCF(pid_groupby[fb_columns], fbfill_groupby)
-        data[fb_columns] = fill
+        data[fb_columns] = fill[fb_columns]
     data = data.reset_index(drop=True) # groupby messes with the index. make them unique again.
     return data
 

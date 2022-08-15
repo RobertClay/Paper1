@@ -213,6 +213,7 @@ def format_bhps_columns(year):
                          "cduse9",  # microwave oven
                          "gor_dv",  # Government Region Derived.
                          "hsprbk",  # accom: lack of adequate heating
+                         "fihhmngrs_dv" # gross income.
                          ]
 
     column_names = ["pidp",  # pidp
@@ -232,6 +233,7 @@ def format_bhps_columns(year):
                     "microwave",  # cduse9
                     "region",  # gor_dv
                     "heating",           # hsprbk
+                    "gross_hh_income",
                     ]
 
     # Variables that change names over dataset.
@@ -393,9 +395,10 @@ def format_ukhls_columns(year):
                          "cduse7",  # tumble dryer
                          "cduse8",  # dishwasher
                          "cduse9",  # microwave oven
-                         "hheat",
+                         "hheat",  # Heating?
                          "gor_dv",  # Government Region Derived.
                          "sf12mcs_dv",   # SF-12 Mental Component Summary (PCS)
+                         "fihhmngrs_dv", # Gross hh income.
                          ]
     # New names for the above columns.
     column_names = ["pidp",
@@ -417,6 +420,7 @@ def format_ukhls_columns(year):
                     "heating",  # hheat
                     "region",  # region
                     "SF-12",             # sf12mcs_dv
+                    "gross_hh_income"
                     ]
 
     # Variables that change names for ukhls data.

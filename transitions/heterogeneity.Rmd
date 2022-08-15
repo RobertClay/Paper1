@@ -1,0 +1,77 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+source("utils.R")
+source("notebook_utils.R")# load in utility functions
+require(tidyr)
+require(glmnet)
+require(geepack)
+require(lme4)
+```
+
+```{r}
+data <- format_baseline_data("/Users/robertclay/paper1/data/corrected_US/", c(2011,2012,2013))
+summary(data)
+```
+
+
+```{r}
+data <- drop_na(data)
+summary(data)
+data <- drop_na(data)
+n <- nrow(data)
+set.seed(88)
+Inx <- sample(n, 0.8*n)
+train<-data[Inx,]
+test<-data[-Inx,]
+y <- train$depression
+y2<- test$depression
+
+dep.gee <- geeglm(1 - (as.integer(factor(depression))-1) ~
+                factor(sex) + 
+                factor(ethnicity) + 
+                age + 
+                factor(education_state) +
+                factor(labour_state) + 1:pidp , data = train, family = binomial,id=pidp
+              , corstr="uncorrelated")
+
+print(summary(dep.gee))
+print(QIC(dep.gee))
+preds<- invlogit(predict(dep.gee, test))
+colours <- as.character(factor(y2, labels=c("blue", "orange")))
+markers <-as.numeric(as.character(factor(y2, labels = c(3, 20))))
+plot_depression_residuals(preds, y2, colours, markers)
+
+```
+
+
+```{r}
+dep.glmm <- glmer(1 - (as.integer(factor(depression))-1)  ~
+                factor(sex) + 
+                factor(ethnicity) + 
+                age +
+                factor(education_state) + 
+                factor(job_sec) +
+                factor(labour_state) +
+                (1|pidp), data = train, family = binomial(link="logit"), verbose = 1, nAGQ =0)
+
+
+# This is dumb. has the same null deviance as the logit model but cant extract it from dep.glmm.
+glmm.sum <- summary(dep.glmm)
+prs <- 1 - glmm.sum$AICtab[4]/logit$null.deviance
+print(prs)
+
+# nagq 0 for fast but sloppy convergence. 1 for accurate and slow (laplacian). see ?glmer
+preds <- invlogit(predict(dep.glmm, test, allow.new.levels=T))
+print(summary(dep.glmm))
+
+#pdf("plots/depression_logistic_normal.pdf")
+colours <- as.character(factor(y2, labels=c("blue", "orange")))
+markers <-as.numeric(as.character(factor(y2, labels = c(3, 20))))
+plot_depression_residuals(preds, y2, colours, markers)
+#dev.off()
+
+```

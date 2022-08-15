@@ -1,0 +1,142 @@
+---
+title: "US Missingness Notebook"
+output: html_notebook
+---
+
+```{r}
+source("utils.R")
+source("notebook_utils.R")# load in utility functions
+require(lme4)
+require(msm)
+require(tidyr)
+require(VIM)
+require(mice)
+require(lattice) # for histogram.
+require(laeken) # for weighedMean.
+
+```
+
+```{r}
+data <- format_baseline_data("/Users/robertclay/paper1/data/corrected_US/", c(2011,2012,2013))
+summary(data)
+```
+
+Structure of missingness.
+clear vast majority of missing are in depression states.
+rest of states have low enough percentages to impute via MI. 
+35922 entries total. 
+
+```{r}
+pdf("../plots/total_missingness_structure.pdf")
+aggr(data, cex.axis = 0.9, oma=c(8,2,4,4), combined=T, bars=F, sortVars=T, varheight=F, numbers=T, prop=F)
+dev.off()
+
+
+pdf("../plots/depression_missingness_structure.pdf")
+aggr(data[, c("SF.12", "depression", "depression_change")], labels = c("SF.12", "depression", "depression_change"), cex.axis = 0.7, oma=c(8,8,4,4), combined=F, sortVars=T, varheight=F, numbers=T, prop=T, col = c(blue, orange))
+dev.off()
+
+```
+
+see groupings of missingness by various levels.
+```{r}
+pdf("../plots/ethnicity_SF12_spinogram.pdf")
+spineMiss(data[, c("ethnicity", "SF.12")], col = c(blue, orange))
+dev.off()
+
+pdf("../plots/age_SF12_spinogram.pdf")
+spineMiss(data[, c("age", "SF.12")], col = c(blue, orange))
+dev.off()
+
+pdf("../plots/jbsec_SF12_spinogram.pdf")
+spineMiss(data[, c("job_sec", "SF.12")], col = c(blue, orange))
+dev.off()
+
+pdf("../plots/labour_SF12_spinogram.pdf")
+spineMiss(data[, c("labour_state", "SF.12")], col = c(blue, orange))
+dev.off()
+
+```
+see same for continuous variables
+```{r}
+is_missing_sf12 <- is.na(data$SF.12)
+is_missing_dep <- is.na(data$depression)
+is_missing_depc <- is.na(data$depression_change)
+
+pdf("../plots/age_SF12_histograms.pdf")
+histogram(~age|is_missing_sf12, data)
+dev.off()
+pdf("../plots/age_HLPRB_histograms.pdf")
+histogram(~age|is_missing_dep, data)
+dev.off()
+
+pdf("../plots/age_GHQ_histograms.pdf")
+histogram(~age|is_missing_depc, data)
+dev.off()
+
+# do this for household too?
+```
+
+
+hotdecking.
+```{r}
+hotdeck_set <- hotdeck(
+  data,
+  variable = c("SF.12", "depression", "depression_change"), 
+  ord_var = c("age", "job_sec", "ethnicity", "job_sec", "labour_state")
+)
+pdf("../plots/SF12_hotdeck_complete_distribution.pdf")
+hist(data$SF.12, col = t_blue, border = blue, freq=F)
+hist(hotdeck_set$SF.12, col = t_orange, border = orange, freq=F, add = T)
+legend("topright", c("Complete", "Imputed"), fill=c(blue, orange))
+dev.off()
+```
+
+knn
+```{r}
+knn_set <- kNN(head(data[, c("SF.12", "depression", "depression_change")], 1000), numFun = weightedMean)
+pdf("../plots/SF12_knn_complete_distribution.pdf")
+hist(data$SF.12, col = t_blue, border = blue, freq=F, ylim = c(0, 0.05))
+hist(knn_set$SF.12, col = t_orange, border = orange, freq=F, add = T)
+legend("topright", c("Complete", "Imputed"), fill=c(blue, orange))
+dev.off()
+```
+
+MICE
+```{r}
+data$depression <- as.factor(data$depression)
+data$depression_change <- as.factor(data$depression_change)
+imp_columns <- c("SF.12", "depression_change","depression", "labour_state",
+                 "age", "sex", "ethnicity", "job_sec", "education_state")
+print(summary(data[,c("SF.12", "depression_change", "depression")]))
+mice_set <- mice(data = data[,imp_columns],
+                 m = 2, maxit = 5, seed = 500,
+                 remove.collinear=T)
+print(summary(complete(mice_set[,c("SF.12", "depression_change", "depression")])))
+```
+
+
+SF.12 pooled regression
+```{r}
+mice.sf12.lm <- with(mice_set, lm(SF.12 ~ factor(sex) + 
+               factor(ethnicity) + 
+               data$age + 
+               factor(education_state) + 
+               factor(labour_state) + 
+               factor(job_sec)))
+final.pool<- with(data=mice_set, expr={lm(SF.12~depression+depression_change)})
+
+summary(final)
+mice.preds<- predict(mice.sf12.lm, test)
+
+pdf("../plots/SF12_MICE_comparison_histogram.pdf")
+hist(data$SF.12, col = t_blue, border = blue, freq=F, ylim = c(0, 0.05))
+hist(mice.preds, col = t_orange, border = orange, freq=F, add = T)
+legend("topright", c("Complete", "Imputed"), fill=c(blue, orange))
+dev.off()
+
+
+pdf("..plots/MICE_depression_scatter.pdf")
+plot_depression_residuals(mice.preds, test$SF.12)
+dev.off()
+```

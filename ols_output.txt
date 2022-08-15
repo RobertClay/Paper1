@@ -1,0 +1,71 @@
+
+\usepackage{booktabs}
+\usepackage{dcolumn}
+
+\begin{table}
+\begin{center}
+\begin{tabular}{l D{)}{)}{10)3}}
+\toprule
+ & \multicolumn{1}{c}{Model 1} \\
+\midrule
+(Intercept)                              & 43.39 \; (0.38)^{***}  \\
+factor(sex)Male                          & 1.77 \; (0.09)^{***}   \\
+factor(ethnicity)BAN                     & -0.87 \; (0.44)^{*}    \\
+factor(ethnicity)BLA                     & 1.72 \; (0.37)^{***}   \\
+factor(ethnicity)BLC                     & -0.04 \; (0.38)        \\
+factor(ethnicity)CHI                     & -0.12 \; (0.67)        \\
+factor(ethnicity)IND                     & 0.58 \; (0.28)^{*}     \\
+factor(ethnicity)MIX                     & -1.07 \; (0.35)^{**}   \\
+factor(ethnicity)OAS                     & 0.15 \; (0.42)         \\
+factor(ethnicity)OBL                     & -1.59 \; (1.12)        \\
+factor(ethnicity)OTH                     & 0.32 \; (0.76)         \\
+factor(ethnicity)PAK                     & -1.23 \; (0.32)^{***}  \\
+factor(ethnicity)WHO                     & 0.02 \; (0.22)         \\
+age                                      & 0.09 \; (0.00)^{***}   \\
+factor(education\_state)A-Level          & -0.32 \; (0.15)^{*}    \\
+factor(education\_state)CSE              & -0.33 \; (0.23)        \\
+factor(education\_state)Degree           & 0.14 \; (0.15)         \\
+factor(education\_state)HE Diploma       & -0.10 \; (0.18)        \\
+factor(education\_state)Higher Degree    & 0.16 \; (0.16)         \\
+factor(education\_state)Less than GCSE   & -0.93 \; (0.13)^{***}  \\
+factor(labour\_state)Family Care         & -1.00 \; (0.34)^{**}   \\
+factor(labour\_state)Government Training & 1.77 \; (1.97)         \\
+factor(labour\_state)Maternity Leave     & -0.48 \; (0.55)        \\
+factor(labour\_state)Other               & -1.86 \; (0.70)^{**}   \\
+factor(labour\_state)Retired             & 1.22 \; (0.32)^{***}   \\
+factor(labour\_state)Self-employed       & 0.36 \; (0.24)         \\
+factor(labour\_state)Sick/Disabled       & -11.10 \; (0.37)^{***} \\
+factor(labour\_state)Student             & 1.01 \; (0.30)^{***}   \\
+factor(labour\_state)Unemployed          & -3.17 \; (0.35)^{***}  \\
+factor(job\_sec)1                        & 0.96 \; (0.38)^{*}     \\
+factor(job\_sec)2                        & 0.64 \; (0.34)         \\
+factor(job\_sec)3                        & 0.52 \; (0.30)         \\
+factor(job\_sec)4                        & 0.77 \; (0.32)^{*}     \\
+factor(job\_sec)5                        & 1.09 \; (0.37)^{**}    \\
+factor(job\_sec)6                        & 1.42 \; (0.35)^{***}   \\
+factor(job\_sec)7                        & 0.90 \; (0.30)^{**}    \\
+factor(job\_sec)8                        & 1.12 \; (0.32)^{***}   \\
+factor(region)East Midlands              & 0.54 \; (0.22)^{*}     \\
+factor(region)East of England            & 0.84 \; (0.21)^{***}   \\
+factor(region)North East                 & -0.07 \; (0.27)        \\
+factor(region)North West                 & 0.28 \; (0.21)         \\
+factor(region)Northern Ireland           & 1.06 \; (0.24)^{***}   \\
+factor(region)Scotland                   & 0.78 \; (0.22)^{***}   \\
+factor(region)South East                 & 0.53 \; (0.20)^{**}    \\
+factor(region)South West                 & 0.63 \; (0.22)^{**}    \\
+factor(region)Wales                      & 0.09 \; (0.23)         \\
+factor(region)West Midlands              & -0.30 \; (0.22)        \\
+factor(region)Yorkshire and The Humber   & 0.54 \; (0.22)^{*}     \\
+gross\_hh\_income                        & 0.00 \; (0.00)^{***}   \\
+\midrule
+R$^2$                                    & 0.09                   \\
+Adj. R$^2$                               & 0.09                   \\
+Num. obs.                                & 48546                  \\
+RMSE                                     & 9.59                   \\
+\bottomrule
+\multicolumn{2}{l}{\scriptsize{$^{***}p<0.001$; $^{**}p<0.01$; $^{*}p<0.05$}}
+\end{tabular}
+\caption{Statistical models}
+\label{table:coefficients}
+\end{center}
+\end{table}

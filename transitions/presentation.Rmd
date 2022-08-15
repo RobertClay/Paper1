@@ -1,0 +1,130 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+assess assumptions of linear model for SF.12.
+see 4 plots
+Residuals vs Fitted. Used to check the linear relationship assumptions. A horizontal line, without distinct patterns is an indication for a linear relationship, what is good.
+
+Normal Q-Q. Used to examine whether the residuals are normally distributed. It’s good if residuals points follow the straight dashed line.
+
+Scale-Location (or Spread-Location). Used to check the homogeneity of variance of the residuals (homoscedasticity). Horizontal line with equally spread points is a good indication of homoscedasticity. This is not the case in our example, where we have a heteroscedasticity problem.
+
+Residuals vs Leverage. Used to identify influential cases, that is extreme values that might influence the regression results when included or excluded from the analysis. 
+
+```{r}
+require(ggfortify)
+require(Hmisc)
+pdf("../plots/first_sf12_dist.pdf")
+hist(train$SF.12)
+dev.off()
+
+pdf("../plots/SF12_residuals.pdf")
+hist(residuals(sf12.lm))
+dev.off()
+
+pdf("../plots/SF12_diagnostics.pdf")
+autoplot(sf12.lm)
+dev.off()
+```
+
+see residuals and leverage stable aparat from extreme outliers.
+qq plot does okay but deviates on left tail. suggests over estimating more depressed individual SF12 scores. scale location clearly non constant. suggests heteroscedasticity which would be expected in data with repeat observations like this. 
+
+There are obvious highly extreme values here. See major leverage values for observations with index 92349 and 71315 (PID 884636487 and 681114527). In this case it is due to individuals suddenly experiencing over 10x increases in income. Their SF12 score is majorly over estimated. 
+
+Removing from the data..
+
+```{r}
+train2 <- train[(which(train$pidp %nin% c(884636487, 681114527, 750749251, 68397127, 1361073051, 1088667767))),]
+sf12.lm2<-lm(SF.12 ~ factor(sex) + 
+                    factor(ethnicity) + 
+                    age + 
+                    factor(education_state) + 
+                     factor(labour_state) + 
+                     factor(job_sec) +
+                      gross_hh_income, 
+                       data= train2)
+print(summary(sf12.lm2))
+
+pdf("../plots/no_outliers_sf12_residuals.pdf")
+hist(residuals(sf12.lm2))
+dev.off()
+
+pdf("../plots/no_outliers_diagnostics.pdf")
+autoplot(sf12.lm2)
+dev.off()
+```
+
+
+see much clearer results. Residuals vs fitted is roughly constant indicating a linear relationship. Normal Q-Q line is good for positive values but over estimates those with less than average sf12 score.  Scale location has a clear linear trend suggesting observations are heteroscedastic. Residuals vs leverage line sees clustering where certain groups influence linear model more than others. Not sure why could be those on more extreme ends of spectrum.
+
+
+
+Labour state
+```{r}
+require(nnet)
+require(ggplot2)
+require(stringr)
+require(shadowtext) 
+
+formula<- "factor(labour_state) ~ 
+  factor(sex) +
+  age +
+  factor(education_state) + 
+  factor(depression) +
+  factor(depression_change) +
+  SF.12 +
+  factor(region) +
+  factor(job_sec) + 
+  factor(ethnicity) +
+  gross_hh_income"
+#  +factor(time) + (1 + time|pidp)"
+emp.mnom <- multinom(formula,data=data, family="binomial", maxit=500)
+outcomes <- predict(emp.mnom, data)
+
+plot = T
+confusion.matrix <- table(data$labour_state, outcomes) # confusion matrix
+group_pops<-rowSums(confusion.matrix)
+print(confusion.matrix)
+print(group_pops)
+
+# percentage of population predicted correctly.
+confusion.frame <- as.data.frame(confusion.matrix/group_pops) # convert to data frame
+confusion.frame$Freq <-round(confusion.frame$Freq, 3) # round to 2dp
+row_names <- paste0(rownames(confusion.matrix), " [")
+row_names <- paste0(row_names,  as.character(group_pops))
+row_names <- paste0(row_names, "]")
+row_names <- str_wrap(row_names, width = 12)
+col_names <- str_wrap(colnames(confusion.matrix), 10)
+# each column is people actually in a state.
+# each row is people predicted a state.
+# E.g. row 3 column 2 is the percentage of people actually in family care
+# predicted as sick/disabled (~7%).
+pdf("../plots/labour_confusion_plot.pdf")
+confusion.plot<- ggplot(confusion.frame, aes(outcomes, rev(Var1), fill= Freq)) +
+  scale_fill_viridis_c("% of state")+
+  geom_tile() + 
+  geom_shadowtext(aes(label=Freq)) +
+  labs(y = "True State [population in state]",x = "Predicted State (no units)") + 
+  scale_y_discrete(labels=rev(row_names)) + # label axes
+  scale_x_discrete(labels=col_names)
+print(confusion.plot)
+dev.off()
+```
+
+```{r}
+require(NeuralNetTools)
+pdf("../plots/labour_nnet_multinomial_structure.pdf")
+#dev.new(width=150, height=200)
+plotnet(emp.mnom, max_sp=T, pad_x = 0.5) # structure graph.
+dev.off()
+```
+
+
+refactoring depression_change by level
+```{r}
+
+```
